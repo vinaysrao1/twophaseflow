@@ -1,0 +1,16 @@
+name = "PipeFlow1D"
+uuid = "cbdb9b21-7c08-46b9-ad6e-18889422921e"
+version = "0.1.0"
+authors = ["twophaseflow contributors"]
+
+[deps]
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+
+[compat]
+julia = "1.10"
+
+[extras]
+Test = "8dfed614-e22d-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

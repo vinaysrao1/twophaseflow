@@ -1,6 +1,10 @@
 # twophaseflow — Plan (draft for review)
 
-Status: **draft v2, not yet approved**. Revised after feedback: full 3D CFD, Julia, D = 10 cm, light crude + water, standard (ISO 5167-4) venturi. No simulation code is written until this plan is finalized.
+Status: **v3**. Decided: Julia; D = 10 cm; very light crude + water; ISO 5167-4 classical venturi; full 3D flow visualization as the end goal.
+
+Two sub-projects:
+1. **`onedim/` — PipeFlow1D** (steady 1D mechanistic model). **Implemented** — see `onedim/README.md`.
+2. **`threed/` — 3D LES/VOF solver** (sections 3–9 below). Not started. Production runs on Modal (GPU); deployment details to be worked out.
 
 ## 1. Scope
 
@@ -188,9 +192,9 @@ Visualization: VTK output for ParaView (iso-surfaces of the oil–water interfac
 - Dispersed-regime droplets not resolved (see 5.2).
 - Development and small tests run in this environment (4 CPU cores, no GPU); production runs need a GPU.
 
-## 9. Open questions
-1. **Hardware**: do you have an NVIDIA/AMD GPU (which, how much memory)? Production 3D runs are impractical on CPU only.
+## 9. Open questions (3D)
+1. **Hardware**: runs on Modal. Need: GPU type (A100 80 GB / H100 suit ~10⁷–10⁸ cells), how results come back (volume vs object storage), budget per run.
 2. **Base**: build on WaterLily.jl + InterfaceAdvection.jl (recommended), or write the solver from scratch?
 3. **Rate range**: is 0.1–3 m/s mixture velocity (3–85 m³/h) right?
 4. **Dispersed flow**: accept VOF limits and add a mixture-model option later, or is dispersed flow a priority?
-5. **1D reference model**: keep the small 1D model in `onedim.jl` as a cross-check (recommended), or drop it?
+5. ~~1D reference model~~ — done as sub-project 1 (`onedim/`); the 3D code will use it for inflow holdup and cross-checks.

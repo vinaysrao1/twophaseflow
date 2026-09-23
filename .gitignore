@@ -1,0 +1,4 @@
+onedim/examples/output/
+Manifest.toml
+*.jl.cov
+*.jl.mem
