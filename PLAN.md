@@ -192,9 +192,30 @@ Visualization: VTK output for ParaView (iso-surfaces of the oil–water interfac
 - Dispersed-regime droplets not resolved (see 5.2).
 - Development and small tests run in this environment (4 CPU cores, no GPU); production runs need a GPU.
 
-## 9. Open questions (3D)
-1. **Hardware**: runs on Modal. Need: GPU type (A100 80 GB / H100 suit ~10⁷–10⁸ cells), how results come back (volume vs object storage), budget per run.
-2. **Base**: build on WaterLily.jl + InterfaceAdvection.jl (recommended), or write the solver from scratch?
-3. **Rate range**: is 0.1–3 m/s mixture velocity (3–85 m³/h) right?
-4. **Dispersed flow**: accept VOF limits and add a mixture-model option later, or is dispersed flow a priority?
-5. ~~1D reference model~~ — done as sub-project 1 (`onedim/`); the 3D code will use it for inflow holdup and cross-checks.
+## 9. Decisions (3D)
+| Topic | Decision |
+|---|---|
+| Hardware | Modal, single **H100 (80 GB)** |
+| Software | Reuse existing packages where possible, but **verify each thoroughly** (code review, own test suite, benchmarks) before relying on it |
+| Rate range | Mixture velocity 0.1–3 m/s (≈ 3–85 m³/h); 3 m/s is the practical maximum |
+| Dispersed flow | **Must be handled** — VOF alone is insufficient (droplets below grid scale). Approach under discussion, see §10 |
+| 1D model | Done (`onedim/`); used for inflow holdup and cross-checks |
+
+### 9.1 Findings from checking candidate packages (2026-09-24)
+- **WaterLily.jl** v1.8.0 (MIT, active, last commit 2026-09-21): incompressible, Cartesian, BDIM immersed boundaries, CUDA/AMD extensions, VTK/JLD2 output, SGS hook (`sgs!` with a Smagorinsky example; WALE must be added). Single phase only.
+- **InterfaceAdvection.jl** v1.0.0-DEV (MIT, unregistered, last commit 2026-09-14): conservative VOF with consistent mass–momentum transport, surface tension, bounded viscosity interpolation, GPU. **Does not support immersed bodies yet** (README goal: "Reintroduce the boundary data immersion method"; `# TODO: support BDIM body` in source) and has an open issue with symmetry BCs under gravity. So pipe walls cannot be represented in the two-phase solver as-is. Options: (a) add BDIM to it (consistent with its momentum-form scheme — non-trivial, must be verified); (b) represent the pipe wall another way (volume penalisation); (c) write our own variable-density step on WaterLily. To be decided after a code review.
+
+## 10. Dispersed flow (under discussion)
+See the discussion in the session; summary of options:
+| Option | What it resolves | Feasible on one H100? |
+|---|---|---|
+| Interface-resolved VOF in the pipe | every drop | No — needs Δ ≈ 50 µm, ~10¹¹ cells for 15 D |
+| LES + mixture (drift-flux) model + transported drop size | concentration field, creaming layer, emulsion viscosity, pressure drop | Yes — hours per case |
+| Euler–Euler two-fluid + population balance | as above plus separate phase velocities | Yes, 2–3× cost; kernels uncertain, LES with E–E less mature |
+| Euler–Lagrange point particles | individual drops (dilute only) | No — invalid at 10–50 % volume fraction and d ≈ Δ |
+| Hybrid VOF + sub-grid dispersed phase | large interfaces resolved, small drops modelled | Yes, research-grade |
+| Interface-resolved "microscope" box (~2–3 cm, periodic, forced turbulence) | drop break-up/coalescence physics, drop sizes, emulsion viscosity calibration | Yes — ~1 day per case |
+
+## 11. Open questions (3D)
+1. Dispersed-flow approach (§10).
+2. WaterLily + InterfaceAdvection vs own variable-density step, after code review (§9.1).
