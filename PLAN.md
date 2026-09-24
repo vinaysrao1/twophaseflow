@@ -198,14 +198,16 @@ Visualization: VTK output for ParaView (iso-surfaces of the oil–water interfac
 | Hardware | Modal, single **H100 (80 GB)** |
 | Software | Reuse existing packages where possible, but **verify each thoroughly** (code review, own test suite, benchmarks) before relying on it |
 | Rate range | Mixture velocity 0.1–3 m/s (≈ 3–85 m³/h); 3 m/s is the practical maximum |
-| Dispersed flow | **Must be handled** — VOF alone is insufficient (droplets below grid scale). Approach under discussion, see §10 |
+| Dispersed flow | LES + mixture (drift-flux) model with transported drop size; no drop-resolved visualisation for now (small-box drop-resolved study deferred) |
+| Transition regime (~1–1.5 m/s) | Hybrid: VOF for resolved interfaces + mixture model for sub-grid drops (option 4) |
+| Surfactants | None — emulsions are unstable (free coalescence); standard emulsion-viscosity and inversion closures apply |
 | 1D model | Done (`onedim/`); used for inflow holdup and cross-checks |
 
 ### 9.1 Findings from checking candidate packages (2026-09-24)
 - **WaterLily.jl** v1.8.0 (MIT, active, last commit 2026-09-21): incompressible, Cartesian, BDIM immersed boundaries, CUDA/AMD extensions, VTK/JLD2 output, SGS hook (`sgs!` with a Smagorinsky example; WALE must be added). Single phase only.
 - **InterfaceAdvection.jl** v1.0.0-DEV (MIT, unregistered, last commit 2026-09-14): conservative VOF with consistent mass–momentum transport, surface tension, bounded viscosity interpolation, GPU. **Does not support immersed bodies yet** (README goal: "Reintroduce the boundary data immersion method"; `# TODO: support BDIM body` in source) and has an open issue with symmetry BCs under gravity. So pipe walls cannot be represented in the two-phase solver as-is. Options: (a) add BDIM to it (consistent with its momentum-form scheme — non-trivial, must be verified); (b) represent the pipe wall another way (volume penalisation); (c) write our own variable-density step on WaterLily. To be decided after a code review.
 
-## 10. Dispersed flow (under discussion)
+## 10. Dispersed flow (decided: mixture model for dispersed, hybrid VOF + mixture for transition)
 See the discussion in the session; summary of options:
 | Option | What it resolves | Feasible on one H100? |
 |---|---|---|
@@ -216,6 +218,27 @@ See the discussion in the session; summary of options:
 | Hybrid VOF + sub-grid dispersed phase | large interfaces resolved, small drops modelled | Yes, research-grade |
 | Interface-resolved "microscope" box (~2–3 cm, periodic, forced turbulence) | drop break-up/coalescence physics, drop sizes, emulsion viscosity calibration | Yes — ~1 day per case |
 
+### 9.2 Checks run (see `threed/checks/README.md`)
+- WaterLily BDIM laminar pipe: wall effectively +0.32 cells outside the geometric radius; flow-rate error 16 % / 8 % / 4 % at R = 8 / 16 / 32 cells (first order, systematic, correctable).
+- WaterLily CPU throughput 7.6×10⁶ cell-steps/s (4 threads); H100 expected ~3×10⁸–1×10⁹ single phase (to be measured).
+- InterfaceAdvection: all 136 tests pass after relaxing one fragile Float32 `==` test; no wall/body coverage.
+
+### 9.3 Is WaterLily the right base? Go/no-go gate
+Best available Julia base (peer-reviewed, tested, GPU, active), but not ideal for pipes: uniform Cartesian grid only (no wall-normal stretching), no wall model, LES hook recently bug-fixed. Gate before building two-phase on it:
+- G1 laminar pipe with SDF offset correction: flow-rate error < 0.5 % at R = 32.
+- G2 turbulent pipe Re_b = 5300 (Re_τ ≈ 180), D/Δ ≈ 180: mean profile and friction factor within 3 % of El Khoury et al. (2013) DNS.
+- G3 wall-modelled pipe at Re_b = 10⁵ and 3×10⁵, D/Δ = 96–128: friction factor within 5 % of McKeon et al. (2004) / Colebrook.
+- G4 venturi single phase: Δp and C vs ISO 5167-4 and the 1D model.
+Fallback if G2/G3 fail: own Julia solver on a body-fitted (cylindrical, radius-mapped) grid, reusing WaterLily's KernelAbstractions patterns.
+
+### 9.4 H100 cost estimate (to be replaced by measured throughput)
+Domain 15 D + 5 D periodic precursor; β = 0.5 throat (4× velocity), CFL 0.5, 10 flow-throughs (3 transient + 7 averaging) → steps ≈ 80 × (D/Δ) × 15.
+| Grid | Cells | Steps | Single phase | Mixture model | VOF / hybrid |
+|---|---|---|---|---|---|
+| D/96 | 2.1e7 | 1.2e5 | 0.7–2 h | 1.5–4 h | 2–7 h |
+| D/128 | 4.7e7 | 1.5e5 | 2–7 h | 4–14 h | 7–20 h |
+| D/192 | 1.5e8 | 2.3e5 | 10–32 h | 20–60 h | 32–100 h |
+Assumed H100 throughput: 3e8–1e9 (single phase), 1.5e8–5e8 (mixture), 1e8–3e8 (VOF/hybrid) cell-steps/s.
+
 ## 11. Open questions (3D)
-1. Dispersed-flow approach (§10).
-2. WaterLily + InterfaceAdvection vs own variable-density step, after code review (§9.1).
+1. Run the go/no-go gate (§9.3) — first Modal job also measures H100 throughput.
